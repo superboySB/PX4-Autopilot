@@ -372,6 +372,10 @@ void SimulatorMavlink::handle_message(const mavlink_message_t *msg)
 		handle_message_landing_target(msg);
 		break;
 
+	case MAVLINK_MSG_ID_MANUAL_CONTROL:
+		handle_message_manual_control(msg);
+		break;
+
 	case MAVLINK_MSG_ID_HIL_STATE_QUATERNION:
 		handle_message_hil_state_quaternion(msg);
 		break;
@@ -467,8 +471,32 @@ void SimulatorMavlink::handle_message_hil_gps(const mavlink_message_t *msg)
 	}
 }
 
+void SimulatorMavlink::handle_message_manual_control(const mavlink_message_t *msg)
+{
+	// PX4_INFO("code: %d", msg->msgid);
+	mavlink_manual_control_t mavlink_manual_control;
+	mavlink_msg_manual_control_decode(msg, &mavlink_manual_control);
+
+	// Check target
+	if (mavlink_manual_control.target != 0 && mavlink_manual_control.target != msg->sysid) {
+		return;
+	}
+
+	manual_control_setpoint_s manual_control_setpoint{};
+	manual_control_setpoint.pitch = mavlink_manual_control.x / 1000.f;
+	manual_control_setpoint.roll = mavlink_manual_control.y / 1000.f;
+	// For backwards compatibility at the moment interpret throttle in range [0,1000]
+	manual_control_setpoint.throttle = mavlink_manual_control.z / 1000.f;
+	manual_control_setpoint.yaw = mavlink_manual_control.r / 1000.f;
+	manual_control_setpoint.data_source = manual_control_setpoint_s::SOURCE_MAVLINK_0 + 0;   // DZP：不晓得对不对，我看下面的bus都不是get_instance_id
+	manual_control_setpoint.timestamp = manual_control_setpoint.timestamp_sample = hrt_absolute_time();
+	manual_control_setpoint.valid = true;
+	_manual_control_input_pub.publish(manual_control_setpoint);
+}
+
 void SimulatorMavlink::handle_message_hil_sensor(const mavlink_message_t *msg)
 {
+	// PX4_INFO("code: %d", msg->msgid);
 	mavlink_hil_sensor_t imu;
 	mavlink_msg_hil_sensor_decode(msg, &imu);
 
